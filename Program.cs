@@ -1,13 +1,13 @@
 ﻿var merged = from sds in GetRecords<Sds>("sds.csv")
              join mstar in GetRecords<Mstar>("ms.csv") on sds.Ticker equals mstar.Ticker
-             select new { rank = Math.Round(Rank(sds, mstar), 0,MidpointRounding.AwayFromZero), sds = sds, mstar = mstar};
+             select new { rank = Math.Round(Rank(sds, mstar), 0,MidpointRounding.AwayFromZero), sds, mstar};
 
 var table = new ConsoleTable("Rank", "Tick", "Name", "Sect","M","A","U", "T", "Rtg", "Sfe", "Yld",
         "Str", "GrS", "1Gr", "5Gr", "20G");
 
 foreach (var r in merged.OrderByDescending(m => m.rank).ThenByDescending(m => m.mstar.FwdYield))
-    table.AddRow(r.rank, r.sds.Ticker,r.sds.Name,r.sds.Sector.Substring(0,4),r.mstar.Moat.t(),
-        r.mstar.CapitalAllocation.t(),r.mstar.Uncertainty.t(), r.mstar.MoatTrend.t(), r.mstar.Rating.toStar(),r.sds.Safety,r.mstar.FwdYield,$"{r.sds.UninterruptedStreak,3}",$"{r.sds.GrowthStreak,3}",
+    table.AddRow(r.rank, r.sds.Ticker, r.sds.Name.ToName(),r.sds.Sector[..4],r.mstar.Moat.T(),
+        r.mstar.CapitalAllocation.T(),r.mstar.Uncertainty.T(), r.mstar.MoatTrend.T(), r.mstar.Rating.ToStar(),r.sds.Safety,r.mstar.FwdYield,$"{r.sds.UninterruptedStreak,3}",$"{r.sds.GrowthStreak,3}",
         $"{Math.Round(r.sds.GrowthLatest,0),3}", $"{Math.Round(r.sds.Growth5Year,0),3}", $"{Math.Round(r.sds.Growth20Year??0,0),3}") ;
 
 table.Write(Format.Minimal);
@@ -58,8 +58,9 @@ public record Mstar
 }
 
 public static class Stex {
-    public static string toStar(this double rating) => (int)rating == 5 ? "*****" : (int)rating == 4 ? "****" : "***";
-    public static string t(this string s) =>
+    public static string ToName(this string s) => s.Length > 25 ? s[..25] : s;
+    public static string ToStar(this double rating) => (int)rating == 5 ? "*****" : (int)rating == 4 ? "****" : "***";
+    public static string T(this string s) =>
         s == "Wide" || s == "Low" || s == "Positive" || s == "Exemplary" ? "+"
         : s == "Negative" ? "-" : "";
 }
