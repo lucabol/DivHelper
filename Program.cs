@@ -1,29 +1,67 @@
 ﻿var merged = from sds in GetRecords<Sds>("sds.csv")
              join mstar in GetRecords<Mstar>("ms.csv") on sds.Ticker equals mstar.Ticker
-             select new { rank = Math.Round(Rank(sds, mstar), 0,MidpointRounding.AwayFromZero), sds, mstar};
+             select new { primaryRank = PrimaryRank(sds, mstar), secondaryRank = SecondaryRank(sds, mstar), sds, mstar};
 
-var table = new ConsoleTable("Rank", "Tick", "Name", "Sect","M","A","U", "T", "Rtg", "Sfe", "Yld",
+var table = new ConsoleTable("PRnk", "SRnk", "Tick", "Name", "Sect","M","A","U", "T", "Rtg", "Sfe", "Yld", "TYld",
         "Str", "GrS", "1Gr", "5Gr", "20G");
 
-foreach (var r in merged.OrderByDescending(m => m.rank).ThenByDescending(m => m.mstar.FwdYield))
-    table.AddRow(r.rank, r.sds.Ticker, r.sds.Name.ToName(),r.sds.Sector[..4],r.mstar.Moat.T(),
-        r.mstar.CapitalAllocation.T(),r.mstar.Uncertainty.T(), r.mstar.MoatTrend.T(), r.mstar.Rating.ToStar(),r.sds.Safety,r.mstar.FwdYield,$"{r.sds.UninterruptedStreak,3}",$"{r.sds.GrowthStreak,3}",
+foreach (var r in merged.OrderByDescending(m => m.primaryRank).ThenByDescending(m => m.secondaryRank).ThenByDescending(m => m.mstar.FwdYield))
+    table.AddRow(r.primaryRank, r.secondaryRank, r.sds.Ticker, r.sds.Name.ToName(),r.sds.Sector[..4],r.mstar.Moat.T(),
+        r.mstar.CapitalAllocation.T(),r.mstar.Uncertainty.T(), r.mstar.MoatTrend.T(),
+        r.mstar.Rating.ToStar(),r.sds.Safety,$"{Math.Round(r.mstar.FwdYield,2),3}",$"{Math.Round(r.sds.Yield,2),3}", $"{r.sds.UninterruptedStreak,3}",$"{r.sds.GrowthStreak,3}",
         $"{Math.Round(r.sds.GrowthLatest,0),3}", $"{Math.Round(r.sds.Growth5Year,0),3}", $"{Math.Round(r.sds.Growth20Year??0,0),3}") ;
+
 
 table.Write(Format.Minimal);
 
-double Rank(Sds sds, Mstar mstar) =>
+Console.ReadLine();
+
+var leftOuter = from sds in GetRecords<Sds>("sds.csv")
+                join mstar in GetRecords<Mstar>("ms.csv")
+                on sds.Ticker equals mstar.Ticker
+                into left
+                from m in left.DefaultIfEmpty()
+                select new { sds, m};
+
+ConsoleTable.From(leftOuter
+    .Where(k => k.m == null)
+    .Select(k => k.sds)
+    .Where(k => k.Safety >= 80)
+    .OrderByDescending(k => k.Yield))
+    .Write(Format.Minimal);
+
+Console.ReadLine();
+
+var leftOuterMs =
+                from mstar in GetRecords<Mstar>("ms.csv")
+                join sds in GetRecords<Sds>("sds.csv")
+                on mstar.Ticker equals sds.Ticker
+                into left
+                from s in left.DefaultIfEmpty()
+                select new { mstar, s};
+
+ConsoleTable.From(leftOuterMs
+    .Where(k => k.s == null)
+    .Select(k => k.mstar)
+    .Where(k => k.Moat == "Wide")
+    .OrderByDescending(k => k.FwdYield))
+    .Write(Format.Minimal);
+
+int PrimaryRank(Sds sds, Mstar mstar) =>
     (mstar.Moat == "Wide" ? 1 : 0) +
-    (mstar.CapitalAllocation == "Exemplary" ? 1 : 0) +
-    (sds.Safety >= 80 ? 1 : 0) +
-    (sds.UninterruptedStreak >= 20 ? 0.5 : 0) +
-    (sds.GrowthStreak >= 10 ? 0.5 : 0) +
-    (sds.GrowthLatest >= 7 ? 0.2 : 0) +
-    (sds.Growth5Year >= 7 ? 0.2 : 0) +
-    (sds.Growth20Year >= 7 ? 0.2 : 0) +
-    (mstar.Uncertainty == "Low" ? 0.5 : 0) +
-    (mstar.Rating > 4.0 ? 0.5 : 0) +
-    (mstar.MoatTrend == "Negative" ? -0.5 : 0);
+    (sds.Safety >= 80 ? 1 : 0)
+    ;
+int SecondaryRank(Sds sds, Mstar mstar) =>
+    (mstar.CapitalAllocation == "Exemplary" ? 4 : 0) +
+    (mstar.Rating > 4.0 ? 4 : 0) +
+    (sds.UninterruptedStreak >= 20 ? 1 : 0) +
+    (sds.GrowthStreak >= 10 ? 1 : 0) +
+    (sds.GrowthLatest >= 7 ? 1 : 0) +
+    (sds.Growth5Year >= 7 ? 1 : 0) +
+    (sds.Growth20Year >= 7 ? 1 : 0) +
+    (mstar.Uncertainty == "Low" ? 2 : 0) +
+    (mstar.MoatTrend == "Negative" ? -2 : 0)
+    ;
 
 IEnumerable<T> GetRecords<T>(string file) {
     using var reader = new StreamReader(file);
